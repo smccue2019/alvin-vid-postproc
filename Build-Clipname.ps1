@@ -1,0 +1,126 @@
+<#
+.SYNOPSIS
+Build-ClipName uses metadata embedded within a ProRes422 file to
+fabricate a more descriptive name that is based on capture time.
+The clip must have embedded timecode and a properly set capture
+date.
+.DESCRIPTION
+Build-ClipName is used to generate a string based on information
+embedded within a video clip, presumably a ProRes422 clip that was
+recorded by an Atomos Samurai recorder. The required information
+consists of clip creation date, start time code, clip duration,
+and dive identity. The latter must be passed as an argument.
+.PARAMETER src_clip
+Required. The name of the clip for which a new name is to be built.
+The usual form is '0000.MOV'.  
+.PARAMETER diveID
+Required. Alvin dive number. Either a string of 4 numerical digits,
+e.g., '4651' or 4 digits preceded by 'AL', e.g. 'AL4651' will be
+accepted. The former will be morphed into the latter.
+.PARAMETER file_ext
+File extension to be appended to the new name
+HISTORY
+9/2013 SJM Created and tested
+11/10/2013 SJM After seeing real video, added clip
+               duration time to the return statement.
+               Expect to use it to dispense with short
+               clips, perhaps by placing them in a
+               collection subdirectory.
+#>
+
+param (
+    [Parameter(Position=0, Mandatory=$true)]
+    [string] $src_clip,
+    [Parameter(Position=1, Mandatory=$true)]
+    [string] $diveID,
+    [string] $file_ext = "mkv"
+    ) 
+    
+    if (-not (Test-Path $src_clip))
+    {
+        Write-Host "$src_clip was not found"
+        # Exit the script
+        return $null
+    }
+    
+    # Now that we know that the source file exists...
+
+    # If diveID is only a number, prepend "AL"
+    if ($diveID -match "AL\d{4}")
+    {
+        #Write-Host "$diveID is in proper form."
+    }
+    elseif ($diveID -match "\d{4}")
+    {       
+        $diveID = "AL", $diveID -join ""
+        #Write-Host "DiveID rewritten as $diveID"
+    }
+    else
+    {
+        Write-Host "DiveID is in incorrect format, $diveID" -backgroundcolor "DarkBlue" -foregroundcolor "Yellow"
+        return $null
+    }
+    
+    # ffprobe is annoyingly verbose, spewing compilation info out to STDERR. Redirect
+    # to out-null.
+    # Pull the clip creation date, starting timecode and clip duration from the source video file
+    # Extract the tcmd stream info integral to a ProRes file and pull date and time params
+    if ( Test-Path "tcmd.txt")
+    {
+        Remove-Item -path "tcmd.txt"
+    }
+    
+    $(c:\ffmpeg\bin\ffprobe.exe -show_streams:tcmd $src_clip > tcmd.txt) 2>&1 | out-null
+ 
+     if ( Test-Path "tcmd.txt")
+    {   
+    
+        $d=select-string -list -path tcmd.txt -pattern "TAG\:creation_time"
+        if ($d -match "\d{4}\-\d{2}\-\d{2}\s\d{2}\:\d{2}\:\d{2}")
+        {
+            $cdt = $matches[0]
+            $date,$time = $cdt -split ' '
+            $yr,$mo,$dy = $date -split '-'
+        }
+        else
+        {
+            Write-Host "Couldnt extract creation date" -backgroundcolor "DarkBlue" -foregroundcolor "Yellow"
+            return $null
+        }
+
+    
+        $t=select-string -list -path tcmd.txt -pattern "TAG\:timecode"
+        if ($t -match "\d{2}\:\d{2}\:\d{2}\;\d{2}")
+        {
+            $startstr=$matches[0]
+            $h,$m,$sf = $startstr -split ":"
+            $s,$f = $sf -split ';'
+            $start_timecode = $h, $m, $s -join ':' 
+        }
+        else
+        {
+            Write-Host "Bad extraction of time code" -backgroundcolor "DarkBlue" -foregroundcolor "Yellow"
+            return $null
+        }
+
+
+        $du=select-string -list -path tcmd.txt -pattern "duration="
+        if ($du -match "\d+\.\d+")
+        {
+            $duration = $matches[0]
+        }
+        else
+        {
+            Write-Host "Couldnt extract clip duration" -backgroundcolor "DarkBlue" -foregroundcolor "Yellow"
+            return $null
+        }
+    }
+    # End time is start + duration. Assemble the constituents.
+    $startdatetime = Get-Date -year $yr -month $mo -day $dy -hour $h -minute $m -second $s
+    $enddatetime = $startdatetime.AddSeconds($duration)
+    $sdatestr = $startdatetime.ToString("yyyyMMddHmmss")
+    $edatestr = $enddatetime.ToString("yyyyMMddHmmss")
+     
+    ($newname =$diveID, "_", $sdatestr, "-", $edatestr, ".", $file_ext -join "") > $null
+   
+    return $newname, $duration
