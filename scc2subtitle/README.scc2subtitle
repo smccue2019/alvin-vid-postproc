@@ -1,0 +1,201 @@
+##########################################################################
+###        Subtitling Upgrade for Alvin Video Post-Processing          ###
+##########################################################################
+
+Scott McCue smccue@whoi.edu
+October 2016
+
+1. Overview
+————————————————————————————————————-—————————————
+This document describes an Oct 2016 software update to the Alvin video
+post-processing pipeline. The update adds the creation of files
+that overlay navigation and sensor data on video via subtitling.
+The new overlays add to and improve the existing overlay function,
+which displays only time information.
+
+At introduction this package should be considered a nascent product.
+It has not been tested operationally or seen by other than the
+author’s eyes. It is expected that use in operations will expose areas
+in which the code can be improved. Also, because the processing system
+on Atlantis is not replicated on shore it is possible that Atlantis vs
+shore system differences will come to light. Once it has been used by
+technicians and Alvin clients it can be improved and made a part of
+normal operations. 
+
+Currently, a bare-bones subtitle is produced operationally as part of the
+transcoding process, one to one with the generation of a proxy file. This
+new version is designed to be run later, after SSSG techs have had a chance
+to perform the renavigation process and presumably after the routine
+transcoding step is completed. [Note that transcoding completion is not
+required. It IS required that renavigation is completed and that original
+sphere videos have been copied onto the system.] Therefore, the upgraded
+subtitles are named so as not to overwrite the barebones subtitle. This
+non-conflicting name will not be recognized automatically by playback software
+such as VLC as a name of an accompanying subtitle file. Users will be required
+to rename subtitles for this recognition to take place. As the project matures
+I expect this subtitle to replace the barebones version, along with the name.
+
+2. Installation
+————————————————————————————————————-—————————————
+
+There are four files. Three are PowerShell .ps1 scripts, one is a text .ini
+file.
+
+Place the .ps1 scripts into C:\Scripts.
+The Alvin.ini can be placed in a convenient location (e.g. top of the dive directory).
+However, the default location is at the top level of D: and this is the recommended
+placement.
+
+The three scripts: SubscriptSccControl.ps1, SubscriptSccToSrt.ps1, SCC-To-Hash.ps1.
+
+
+[I will attempt delivery of the subscripting package via email. Prior deliveries of
+similar code have been unsuccessful, with attachments of .ps1 files failing to function
+after installation. I will therefore attach both .ps1 files and text equivalents of them.
+Caution with the text files is required: it is likely that word wrapping will creep in
+somewhere in the transfer and will have to be countered.]
+
+3. Usage
+————————————————————————————————————-—————————————
+
+As before the introduction of this upgrade, technicians edit Alvin.ini prior
+to any post-processing to define the dive number and cruise ID. Added to this is
+now the editing of configurations for subtitling. See section X for detailed instructions
+of configuring with Alvin.ini.
+
+The expected place for Alvin.ini is at the top level of mount point D:. However, it
+can be placed elsewhere. The technician must then pass the full path to the
+control script via command line argument.
+
+3-0: Processing Steps
+================
+
+3-1: Create proxies.
+================
+Perform video clip transcoding as usual. Technically this is not required, but it
+does mean that the proxy files upon which the subtitles are overlain will exist and can
+be used to check subtitle function.
+
+3-2: Perform renavigation.
+================
+Post-process the dive’s navigation to create the tabular .scc file that supplies the
+sensor data used in the subtitles. This is external step happens away from the video post-
+processing system and renav results must be moved manually into the video hierarchy.
+I suggest copying the dive’s .scc file to the top of the dive video clip hierarchy, e.g.,
+D:\Al4835\sentry_yyyymmdd_hhmm.scc
+
+3-3: Create upgraded subtitles.
+================
+Invoke SubtitleSccControl.ps1 with required arguments. The mandatory argument is the
+full path to the .scc file, but there are optional arguments you may wish to employ.
+
+Example:
+
+c:\scripts\SubtitleSccControl.ps1 -sccfilename d:\ATXX-XX\ALXXXX\sentry_yyyymmdd_hhmm.scc
+e.g.
+c:\Scripts\SubtitleSccControl.ps1 -inifile d:\alvin.ini …
+-sccfilename d:\AT36-01\al4835\AL4835_20160808_1845.scc 
+
+After invocation the software feeds back the parameters of what it’s about to do. If
+something is wrong, you have five seconds to kill execution with <CNTRL>-<BREAK>.
+
+
+3-4: Post-invocation
+================
+The results of successful subtitles creation will yield files with names of form
+<diveID>_<starttime>_<stoptime>_<recorder>_scc.srt, and they will be placed in the
+same folders as the proxy videos they will overlay. Already in that same directory
+will be the barebones subtitles generated during the transcoding step. Formats of the
+two subtitle filenames will differ by the string “_<recorder>_scc” in the upgraded
+subtitle file.
+For an overall spot-check, choose a video-subtitle triplet and manually rename the two
+subtitle files so that the barebones file is renamed and the name of upgraded content
+is the name of the barebones file. Use ‘VLC’ to playback the proxy and determine if subtitle content and presentation are acceptable.
+The subtitle files can also be examined directly. Subtitle files are text files and are simply a collection of four-line stanzas with the following content:
+
+line1: Stanza count within this file [integer]
+line2: Text display start and stop time, relative to beginning of the current clip.
+line3: The text to display.
+line4: <blank>
+
+If subtitle generation works acceptably, it may be that the cruise chief scientist will
+request that the upgraded product be made to work by default with playback software.
+That is, that the <diveID>_<starttime>_<stoptime>_<recorder>_scc.srt name form be
+changed to <diveID>_<starttime>_<stoptime>.srt
+
+I ask that such changes are not made to the data package until the new subtitle method is proven and is no longer considered to be a nascent product. In the section “Shell
+scripts to rename subtitle files”  are a couple methods the science party can use to
+rename files on their own. Please pass them on.
+
+[If the chief scientist insists that you the technician rename the files, go ahead. I’ve
+provided the script RenameSRTs.ps1 to help with that.]
+
+
+4. Editing Alvin.ini to control subtitle content.
+
+Control is exercised in two ways. The first is through choosing which scc parameters
+are to be inserted into subtitle text. The second is defining how the subtitle line
+is fleshed out. In both cases, edit Alvi.ini in the SUBTITLE section.
+
+Choose the sac parameters by defining SUBTITLE srt_paramN with the label used within
+the scc hash table as a keyword for that data. There are currently six params.
+
+Possible keywords (Oct 2016):
+'Date','Time','Lat','Lon','Depth','Pressure','Heading','Altitude', ...
+'Magx','Magy','Magz','Obs','Eh','Dehdt','O2','Temp','Conductivity’,…
+‘SoundSpeed','SVPSoundSpeed','Orp'
+
+Don’t use quotations on the strings.
+
+Example:
+srt_param1=Date
+srt_param2=Time
+srt_param3=Lat
+srt_param4=Lon
+srt_param5=Depth
+srt_param6=Heading
+
+These will be placed in order 1 to 6 in the subtitle line.
+
+To clarify the values I have added prefix and suffix string definitions. These will be
+concatenated (spaces must be explicit) to the values of the parameters selected above.
+
+So, the entries in Alvin.ini below
+srt_param1_prefix=
+srt_param2_prefix=
+srt_param3_prefix=
+srt_param4_prefix=
+srt_param5_prefix=d:
+srt_param6_prefix=h:
+
+srt_param1_suffix=
+srt_param2_suffix=
+srt_param3_suffix=/
+srt_param4_suffix=
+srt_param5_suffix=m
+srt_param6_suffix=
+
+will prepend “d:” in front of the (stringed) value of depth and “h:” in front of heading.
+A forward slash will be added to the lat string, dividing the lat and lon values in the
+subtitle line. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
